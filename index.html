@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>每日 IP 与收益统计</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#fff; --text:#1c2230; --muted:#6b7385; --line:#e3e6ec;
+    --accent:#2f6fed; --good:#16a34a; --sel:#eef4ff;
+    --b1:#2f6fed; --b2:#16a34a; --b3:#d97706; --b4:#9333ea;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#11141a; --card:#1a1f28; --text:#e7eaf0; --muted:#98a1b3; --line:#2b3240; --sel:#1d2a44; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:20px 16px 48px}
+  .head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+  h1{font-size:22px;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 18px}
+  .lang{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--card)}
+  .lang button{border:0;border-radius:0;padding:6px 14px;background:transparent}
+  .lang button.on{background:var(--accent);color:#fff}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+  .card h2{font-size:16px;margin:0 0 12px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .kpi .l{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.03em}
+  .kpi .v{font-size:26px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums}
+  .kpi.money .v{color:var(--good)}
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+  button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:8px;padding:6px 12px;cursor:pointer}
+  button:hover{border-color:var(--accent)}
+  .scroll{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+  th{color:var(--muted);font-weight:600;font-size:12px;background:var(--card);position:sticky;top:0}
+  td:first-child,th:first-child,td.l,th.l{text-align:left}
+  tr.selected td{background:var(--sel)}
+  tfoot td{font-weight:700;border-top:2px solid var(--line)}
+  td.money{color:var(--good);font-weight:600}
+  .charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px}
+  .chartbox{position:relative;height:300px}
+  details{border:1px solid var(--line);border-radius:10px;margin-bottom:10px;background:var(--card)}
+  summary{cursor:pointer;padding:10px 14px;font-weight:600;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  summary span.m{color:var(--muted);font-weight:400}
+  details .scroll{padding:0 8px 10px}
+  .note{color:var(--muted);font-size:12.5px;margin-top:8px}
+  .empty{padding:24px;text-align:center;color:var(--muted)}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .na{color:var(--muted)}
+  input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+  .formula{font-size:13px;line-height:1.7}
+  .formula code{background:var(--sel);padding:1px 6px;border-radius:5px}
+  .lock{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px}
+  .lock form{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px;width:100%;max-width:340px;text-align:center}
+  .lock h2{margin:0 0 6px;font-size:18px}
+  .lock p{margin:0 0 14px;color:var(--muted);font-size:13px}
+  .lock input{width:100%;font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);margin-bottom:10px;text-align:center;letter-spacing:.2em}
+  .lock button{width:100%;background:var(--accent);color:#fff;border:0;padding:10px}
+  .lock .err{color:#dc2626;font-size:13px;min-height:18px;margin:8px 0 0}
+  .hidden{display:none !important}
+</style>
+</head>
+<body>
+<div class="lock" id="lock">
+  <form id="lockForm" autocomplete="off">
+    <h2>🔒 每日 IP 与收益统计</h2>
+    <p>请输入密码查看</p>
+    <input type="password" id="pw" inputmode="numeric" placeholder="密码" aria-label="密码" required>
+    <button type="submit" id="pwBtn">进入</button>
+    <div class="err" id="pwErr"></div>
+  </form>
+</div>
+<div class="wrap hidden" id="main">
+  <div class="head">
+    <div>
+      <h1 data-i18n="title"></h1>
+      <p class="sub"><span data-i18n="subtitle"></span> <span class="note" id="updatedWrap">⏱ <span id="updatedAt">—</span></span></p>
+    </div>
+
+  </div>
+
+  <div class="kpis" id="kpis">
+    <div class="kpi"><div class="l" data-i18n="kDays"></div><div class="v" id="kDays">—</div></div>
+    <div class="kpi"><div class="l" data-i18n="kIP"></div><div class="v" id="kIP">—</div></div>
+    <div class="kpi money"><div class="l" data-i18n="kMoney"></div><div class="v" id="kMoney">—</div></div>
+  </div>
+
+  <div class="card" style="margin-top:16px" id="summaryCard">
+    <h2 data-i18n="sumTitle"></h2>
+    <div class="toolbar">
+      <button id="selAll" data-i18n="selAll"></button>
+      <button id="selNone" data-i18n="selNone"></button>
+      <span class="note" style="margin:0" data-i18n="tickHint"></span>
+    </div>
+    <div class="scroll">
+      <table id="sumTable">
+        <thead><tr>
+          <th class="l"><input type="checkbox" id="chkAll"></th>
+          <th class="l" data-i18n="colDate"></th>
+          <th><span class="dot" style="background:var(--b1)"></span>bot</th>
+          <th><span class="dot" style="background:var(--b2)"></span>bot2</th>
+          <th><span class="dot" style="background:var(--b3)"></span>bot3</th>
+          <th><span class="dot" style="background:var(--b4)"></span>bot4</th>
+          <th data-i18n="colTotalIP"></th>
+          <th data-i18n="colMoney"></th>
+        </tr></thead>
+        <tbody id="sumBody"></tbody>
+        <tfoot id="sumFoot"></tfoot>
+      </table>
+    </div>
+    <p class="note" data-i18n="sumNote"></p>
+  </div>
+
+  <div class="card" id="chartTotalCard"><h2 data-i18n="chTotal"></h2><div class="chartbox"><canvas id="chartTotal"></canvas></div></div>
+
+  <div class="charts">
+    <div class="card" id="chartIpCard"><h2 data-i18n="chIp"></h2><div class="chartbox"><canvas id="chartIp"></canvas></div></div>
+    <div class="card" id="chartSuccCard"><h2 data-i18n="chSucc"></h2><div class="chartbox"><canvas id="chartSucc"></canvas></div></div>
+  </div>
+
+  <div class="card" id="detailCard">
+    <h2 data-i18n="detTitle"></h2>
+    <div id="details"></div>
+  </div>
+
+  <div class="card formula" id="formulaCard">
+    <h2 data-i18n="fTitle"></h2>
+    <div id="formulaBody"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const BOTS = ["bot","bot2","bot3","bot4"];
+  const COLORS = {bot:"#2f6fed",bot2:"#16a34a",bot3:"#d97706",bot4:"#9333ea"};
+
+  const I18N = {
+    vi: {
+      docTitle:"Thống kê IP & tiền theo ngày",
+      title:"Thống kê IP thực tế & tiền theo ngày",
+      subtitle:"Nguồn: report \"Daily Summary\" của Proxy-bot (Telegram) và IP của CNZZ cho từng bot. Cập nhật mỗi tối khoảng 23:30 giờ VN.",
+      kDays:"Số ngày đã chọn", kIP:"Tổng IP thực tế (đã chọn)", kMoney:"Tổng tiền (đã chọn)",
+      sumTitle:"Tổng hợp theo ngày", selAll:"Chọn tất cả", selNone:"Bỏ chọn", tickHint:"Tick ngày để tính tổng tiền.",
+      colDate:"Ngày", colTotalIP:"Tổng IP", colMoney:"Tiền ($)",
+      sumNote:"Các cột bot = IP thực tế của từng bot. Dòng cuối là tổng của các ngày đang được chọn.",
+      chTotal:"Tổng 4 bot theo ngày: Tổng IP thực tế & Tiền", chIp:"IP CNZZ theo ngày", chSucc:"Tổng Success theo ngày",
+      detTitle:"Chi tiết từng ngày", fTitle:"Công thức",
+      loading:"Đang tải dữ liệu…", noData:"Chưa có dữ liệu.",
+      totalN:(n)=>"Tổng ("+n+" ngày)", dayLabel:(d)=>"Ngày "+d, dayMeta:(ip,m)=>"Tổng IP "+ip+" · $"+m,
+      selectDay:(d)=>"Chọn ngày "+d, selectAllAria:"Chọn tất cả",
+      detCols:["Bot","SV1","SV2","SV3","Tổng Success","IP CNZZ","Tỷ lệ","Tỷ lệ (cắt 2 số)","IP thực tế"],
+      total:"Tổng", notYet:"chưa có",
+      dsTotalIP:"Tổng IP thực tế", dsMoney:"Tiền ($)", moneyTip:"Tiền", axisIP:"IP",
+      errOpen:"",
+      errDb:"Không truy cập được dữ liệu. Hãy đăng nhập claude.ai rồi mở lại trang.",
+      errTimeout:"Không tải được dữ liệu. Hãy mở trang khi đã đăng nhập claude.ai.",
+      errLoad:"Lỗi tải dữ liệu: ", unknown:"không rõ",
+      formula:[
+        "• <b>Tổng Success</b> (mỗi bot) = Success mục \"Total\" của <code>SV1 + SV2 + SV3</code> (thiếu server nào tính 0)",
+        "• <b>Tỷ lệ</b> = <code>IP CNZZ ÷ Tổng Success</code>, cắt lấy 2 chữ số thập phân (0,967 → 0,96)",
+        "• <b>IP thực tế</b> (mỗi bot) = <code>Tổng Success × Tỷ lệ</code>, làm tròn lên số nguyên",
+        "• <b>Tổng IP</b> = IP thực tế bot + bot2 + bot3 + bot4",
+        "• <b>Tiền</b> = <code>Tổng IP × 0,05 × 0,15</code> $"
+      ],
+      formulaNote:"Bot chưa có IP CNZZ thì IP thực tế tính 0. Ngày theo report (giờ VN) khớp với ngày CNZZ (giờ Trung Quốc).",
+      locale:"vi-VN"
+    },
+    zh: {
+      docTitle:"每日 IP 与收益统计",
+      title:"每日实际 IP 与收益统计",
+      subtitle:"数据来源：Proxy-bot 的 \"Daily Summary\" 报告（Telegram）及各机器人对应的 CNZZ IP。每晚约 23:30（越南时间）更新。",
+      kDays:"已选天数", kIP:"实际 IP 合计（已选）", kMoney:"金额合计（已选）",
+      sumTitle:"每日汇总", selAll:"全选", selNone:"取消全选", tickHint:"勾选日期以计算总金额。",
+      colDate:"日期", colTotalIP:"IP 合计", colMoney:"金额 ($)",
+      sumNote:"各 bot 列 = 该机器人的实际 IP。最后一行为当前所选日期的合计。",
+      chTotal:"4 个机器人每日合计：实际 IP 合计与金额", chIp:"每日 CNZZ IP", chSucc:"每日 Success 合计",
+      detTitle:"每日明细", fTitle:"计算公式",
+      loading:"数据加载中…", noData:"暂无数据。",
+      totalN:(n)=>"合计（"+n+" 天）", dayLabel:(d)=>d, dayMeta:(ip,m)=>"IP 合计 "+ip+" · $"+m,
+      selectDay:(d)=>"选择 "+d, selectAllAria:"全选",
+      detCols:["机器人","SV1","SV2","SV3","Success 合计","CNZZ IP","比例","比例（截取两位）","实际 IP"],
+      total:"合计", notYet:"暂无",
+      dsTotalIP:"实际 IP 合计", dsMoney:"金额 ($)", moneyTip:"金额", axisIP:"IP",
+      errOpen:"",
+      errDb:"无法访问数据，请登录 claude.ai 后重新打开页面。",
+      errTimeout:"数据加载失败，请登录 claude.ai 后再打开页面。",
+      errLoad:"数据加载出错：", unknown:"未知",
+      formula:[
+        "• <b>Success 合计</b>（每个机器人）= <code>SV1 + SV2 + SV3</code> 报告中 \"Total\" 的 Success（缺少的服务器记为 0）",
+        "• <b>比例</b> = <code>CNZZ IP ÷ Success 合计</code>，截取两位小数（0.967 → 0.96）",
+        "• <b>实际 IP</b>（每个机器人）= <code>Success 合计 × 比例</code>，向上取整",
+        "• <b>IP 合计</b> = bot + bot2 + bot3 + bot4 的实际 IP",
+        "• <b>金额</b> = <code>IP 合计 × 0.05 × 0.15</code> $"
+      ],
+      formulaNote:"尚无 CNZZ IP 的机器人，实际 IP 记为 0。报告日期（越南时间）与 CNZZ 日期（北京时间）相对应。",
+      locale:"zh-CN"
+    }
+  };
+
+  const lang = "zh";
+  function T(){ return I18N[lang]; }
+  let nf, nf2, nf4;
+  function setFormatters(){
+    const loc = T().locale;
+    nf = new Intl.NumberFormat(loc);
+    nf2 = new Intl.NumberFormat(loc,{minimumFractionDigits:2,maximumFractionDigits:2});
+    nf4 = new Intl.NumberFormat(loc,{minimumFractionDigits:4,maximumFractionDigits:4});
+  }
+  setFormatters();
+
+  let days = [];
+  const selected = new Set();
+  let selectionTouched = false;
+  let chartIp = null, chartSucc = null, chartTotal = null;
+  let status = "loading"; let statusMsg = "";
+
+  function num(v){ const n = Number(v); return Number.isFinite(n) ? n : 0; }
+  function fmtDate(d){
+    const p = String(d).split("-"); if (p.length !== 3) return String(d);
+    return lang === "zh" ? p[0]+"-"+p[1]+"-"+p[2] : p[2]+"/"+p[1]+"/"+p[0];
+  }
+  function fmtShort(d){
+    const p = String(d).split("-"); if (p.length !== 3) return String(d);
+    return lang === "zh" ? p[1]+"-"+p[2] : p[2]+"/"+p[1];
+  }
+
+  function computeBot(b){
+    b = b || {};
+    const sv1 = num(b.sv1), sv2 = num(b.sv2), sv3 = num(b.sv3);
+    const success = sv1 + sv2 + sv3;
+    const hasIp = b.ip !== null && b.ip !== undefined && b.ip !== "";
+    const ip = hasIp ? num(b.ip) : null;
+    let ratioRaw = null, ratioCents = null, real = 0;
+    if (hasIp && success > 0){
+      ratioRaw = ip / success;
+      ratioCents = Math.floor((ip * 100) / success);        // truncate to 2 decimals
+      real = Math.floor((success * ratioCents + 99) / 100);  // round UP to integer
+    }
+    return {sv1, sv2, sv3, success, ip, ratioRaw, ratioCents, real};
+  }
+  function computeDay(doc){
+    const bots = {}; let total = 0;
+    BOTS.forEach(k => { bots[k] = computeBot(doc.bots && doc.bots[k]); total += bots[k].real; });
+    return {date: doc.date, bots, total, money: total * 0.05 * 0.15};
+  }
+
+  function td(text, cls){ const c = document.createElement("td"); c.textContent = text; if (cls) c.className = cls; return c; }
+
+  function applyStatic(){
+    document.documentElement.lang = lang === "zh" ? "zh-CN" : "vi";
+    document.title = T().docTitle;
+    document.querySelectorAll("[data-i18n]").forEach(el => { const v = T()[el.getAttribute("data-i18n")]; if (typeof v === "string") el.textContent = v; });
+    document.getElementById("chkAll").setAttribute("aria-label", T().selectAllAria);
+    const fb = document.getElementById("formulaBody"); fb.replaceChildren();
+    T().formula.forEach(h => { const d = document.createElement("div"); d.innerHTML = h; fb.appendChild(d); }); // static, trusted strings
+    const n = document.createElement("div"); n.className = "note"; n.textContent = T().formulaNote; fb.appendChild(n);
+  }
+
+  function messageRow(msg){
+    const tr = document.createElement("tr"); const c = td(msg, "empty"); c.colSpan = 8; tr.appendChild(c); return tr;
+  }
+
+  function renderSummary(){
+    const body = document.getElementById("sumBody");
+    const foot = document.getElementById("sumFoot");
+    body.replaceChildren(); foot.replaceChildren();
+    if (status !== "ok"){ body.appendChild(messageRow(status === "loading" ? T().loading : statusMsg)); updateKpis(); return; }
+    if (!days.length){ body.appendChild(messageRow(T().noData)); updateKpis(); return; }
+    days.slice().reverse().forEach(d => {
+      const tr = document.createElement("tr");
+      if (selected.has(d.date)) tr.classList.add("selected");
+      const c0 = document.createElement("td"); c0.className = "l";
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = selected.has(d.date);
+      cb.setAttribute("aria-label", T().selectDay(fmtDate(d.date)));
+      cb.addEventListener("change", () => { selectionTouched = true; cb.checked ? selected.add(d.date) : selected.delete(d.date); renderSummary(); });
+      c0.appendChild(cb); tr.appendChild(c0);
+      tr.appendChild(td(fmtDate(d.date), "l"));
+      BOTS.forEach(k => tr.appendChild(td(nf.format(d.bots[k].real))));
+      tr.appendChild(td(nf.format(d.total)));
+      tr.appendChild(td(nf2.format(d.money), "money"));
+      body.appendChild(tr);
+    });
+    const sel = days.filter(d => selected.has(d.date));
+    const tr = document.createElement("tr");
+    tr.appendChild(td("", "l"));
+    tr.appendChild(td(T().totalN(sel.length), "l"));
+    BOTS.forEach(k => tr.appendChild(td(nf.format(sel.reduce((s,d)=>s+d.bots[k].real,0)))));
+    const tIP = sel.reduce((s,d)=>s+d.total,0);
+    tr.appendChild(td(nf.format(tIP)));
+    tr.appendChild(td(nf2.format(tIP*0.05*0.15), "money"));
+    foot.appendChild(tr);
+    const all = document.getElementById("chkAll");
+    all.checked = sel.length === days.length && days.length > 0;
+    all.indeterminate = sel.length > 0 && sel.length < days.length;
+    updateKpis();
+  }
+
+  function updateKpis(){
+    const sel = days.filter(d => selected.has(d.date));
+    const tIP = sel.reduce((s,d)=>s+d.total,0);
+    document.getElementById("kDays").textContent = status === "ok" ? nf.format(sel.length) : "—";
+    document.getElementById("kIP").textContent = status === "ok" ? nf.format(tIP) : "—";
+    document.getElementById("kMoney").textContent = status === "ok" ? "$" + nf2.format(tIP*0.05*0.15) : "—";
+  }
+
+  function renderDetails(){
+    const box = document.getElementById("details");
+    box.replaceChildren();
+    if (status !== "ok" || !days.length){
+      const e = document.createElement("div"); e.className="empty";
+      e.textContent = status === "loading" ? T().loading : (status === "ok" ? T().noData : statusMsg);
+      box.appendChild(e); return;
+    }
+    days.slice().reverse().forEach((d, i) => {
+      const det = document.createElement("details"); if (i === 0) det.open = true;
+      const sum = document.createElement("summary");
+      const a = document.createElement("span"); a.textContent = T().dayLabel(fmtDate(d.date));
+      const b = document.createElement("span"); b.className = "m"; b.textContent = T().dayMeta(nf.format(d.total), nf2.format(d.money));
+      sum.append(a, b); det.appendChild(sum);
+      const sc = document.createElement("div"); sc.className = "scroll";
+      const t = document.createElement("table");
+      const th = document.createElement("thead"); const hr = document.createElement("tr");
+      T().detCols.forEach((h,j)=>{ const x=document.createElement("th"); x.textContent=h; if(j===0) x.className="l"; hr.appendChild(x); });
+      th.appendChild(hr); t.appendChild(th);
+      const tb = document.createElement("tbody");
+      BOTS.forEach(k => {
+        const r = d.bots[k]; const tr = document.createElement("tr");
+        const n = td("", "l"); const dot = document.createElement("span"); dot.className="dot"; dot.style.background = COLORS[k]; n.append(dot, document.createTextNode(k)); tr.appendChild(n);
+        tr.appendChild(td(nf.format(r.sv1))); tr.appendChild(td(nf.format(r.sv2))); tr.appendChild(td(nf.format(r.sv3)));
+        tr.appendChild(td(nf.format(r.success)));
+        tr.appendChild(r.ip === null ? td(T().notYet, "na") : td(nf.format(r.ip)));
+        tr.appendChild(r.ratioRaw === null ? td("–", "na") : td(nf4.format(r.ratioRaw)));
+        tr.appendChild(r.ratioCents === null ? td("–", "na") : td(nf2.format(r.ratioCents/100)));
+        tr.appendChild(td(nf.format(r.real)));
+        tb.appendChild(tr);
+      });
+      t.appendChild(tb);
+      const tf = document.createElement("tfoot"); const fr = document.createElement("tr");
+      fr.appendChild(td(T().total, "l"));
+      ["sv1","sv2","sv3","success"].forEach(f => fr.appendChild(td(nf.format(BOTS.reduce((s,k)=>s+d.bots[k][f],0)))));
+      fr.appendChild(td("")); fr.appendChild(td("")); fr.appendChild(td(""));
+      fr.appendChild(td(nf.format(d.total)));
+      tf.appendChild(fr); t.appendChild(tf);
+      sc.appendChild(t); det.appendChild(sc); box.appendChild(det);
+    });
+  }
+
+  function renderCharts(){
+    if (typeof Chart === "undefined") return;
+    const css = getComputedStyle(document.documentElement);
+    const textColor = css.getPropertyValue("--muted").trim() || "#6b7385";
+    const gridColor = css.getPropertyValue("--line").trim() || "#e3e6ec";
+    const labels = days.map(d => fmtShort(d.date));
+    const opts = {
+      responsive:true, maintainAspectRatio:false, interaction:{mode:"index",intersect:false},
+      plugins:{legend:{labels:{color:textColor}}, tooltip:{callbacks:{label:(c)=> c.dataset.label + ": " + (c.parsed.y===null ? T().notYet : nf.format(c.parsed.y))}}},
+      scales:{x:{ticks:{color:textColor},grid:{color:gridColor}}, y:{ticks:{color:textColor, callback:(v)=>nf.format(v)},grid:{color:gridColor},beginAtZero:true}}
+    };
+    const ipSets = BOTS.map(k => ({label:k, data:days.map(d=>d.bots[k].ip), borderColor:COLORS[k], backgroundColor:COLORS[k], tension:.25, spanGaps:false, pointRadius:3}))
+                      .filter(s => s.data.some(v => v !== null));
+    const succSets = BOTS.map(k => ({label:k, data:days.map(d=>d.bots[k].success), backgroundColor:COLORS[k], borderColor:COLORS[k]}));
+    if (chartIp) chartIp.destroy();
+    if (chartSucc) chartSucc.destroy();
+    if (chartTotal) chartTotal.destroy();
+    chartTotal = new Chart(document.getElementById("chartTotal"), {
+      data:{labels, datasets:[
+        {type:"bar", label:T().dsTotalIP, data:days.map(d=>d.total), backgroundColor:"#2f6fed", yAxisID:"y", order:2},
+        {type:"line", label:T().dsMoney, data:days.map(d=>Math.round(d.money*100)/100), borderColor:"#16a34a", backgroundColor:"#16a34a", yAxisID:"y1", tension:.25, pointRadius:4, order:1}
+      ]},
+      options:{
+        responsive:true, maintainAspectRatio:false, interaction:{mode:"index",intersect:false},
+        plugins:{legend:{labels:{color:textColor}}, tooltip:{callbacks:{label:(c)=> c.dataset.yAxisID==="y1" ? T().moneyTip + ": $" + nf2.format(c.parsed.y) : c.dataset.label + ": " + nf.format(c.parsed.y)}}},
+        scales:{
+          x:{ticks:{color:textColor},grid:{color:gridColor}},
+          y:{position:"left", beginAtZero:true, ticks:{color:textColor, callback:(v)=>nf.format(v)}, grid:{color:gridColor}, title:{display:true, text:T().axisIP, color:textColor}},
+          y1:{position:"right", beginAtZero:true, ticks:{color:textColor, callback:(v)=>"$"+nf.format(v)}, grid:{drawOnChartArea:false}, title:{display:true, text:"$", color:textColor}}
+        }
+      }
+    });
+    chartIp = new Chart(document.getElementById("chartIp"), {type:"line", data:{labels, datasets:ipSets}, options:opts});
+    chartSucc = new Chart(document.getElementById("chartSucc"), {type:"bar", data:{labels, datasets:succSets}, options:opts});
+  }
+
+  function renderAll(){ applyStatic(); renderSummary(); renderDetails(); renderCharts(); }
+
+
+
+  function setRows(docs){
+    days = docs.filter(x => x && x.date).map(computeDay).sort((a,b)=> a.date < b.date ? -1 : 1);
+    if (!selectionTouched){ selected.clear(); days.forEach(d => selected.add(d.date)); }
+    else { const known = new Set(days.map(d=>d.date)); [...selected].forEach(x => { if(!known.has(x)) selected.delete(x); }); }
+    status = "ok";
+    renderSummary(); renderDetails(); renderCharts();
+  }
+
+  document.getElementById("selAll").addEventListener("click", ()=>{ selectionTouched = true; days.forEach(d=>selected.add(d.date)); renderSummary(); });
+  document.getElementById("selNone").addEventListener("click", ()=>{ selectionTouched = true; selected.clear(); renderSummary(); });
+  document.getElementById("chkAll").addEventListener("change", (e)=>{ selectionTouched = true; if (e.target.checked) days.forEach(d=>selected.add(d.date)); else selected.clear(); renderSummary(); });
+
+  function fail(key, extra){ status = "error"; statusMsg = T()[key] + (extra || ""); renderSummary(); renderDetails(); }
+
+  renderAll();
+
+  function b64(x){ const s = atob(x); const a = new Uint8Array(s.length); for (let i=0;i<s.length;i++) a[i]=s.charCodeAt(i); return a; }
+  async function decrypt(enc, pw){
+    const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]);
+    const key = await crypto.subtle.deriveKey({name:"PBKDF2", salt:b64(enc.salt), iterations:enc.iter, hash:"SHA-256"}, base, {name:"AES-GCM", length:256}, false, ["decrypt"]);
+    const plain = await crypto.subtle.decrypt({name:"AES-GCM", iv:b64(enc.iv)}, key, b64(enc.ct));
+    return JSON.parse(new TextDecoder().decode(plain));
+  }
+  let encCache = null;
+  async function unlock(pw){
+    if (!encCache){
+      const r = await fetch("data.enc.json?t=" + Date.now(), {cache:"no-store"});
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      encCache = await r.json();
+    }
+    const j = await decrypt(encCache, pw);   // throws on wrong password
+    document.getElementById("lock").classList.add("hidden");
+    document.getElementById("main").classList.remove("hidden");
+    setRows(Array.isArray(j.days) ? j.days : []);
+    const u = document.getElementById("updatedAt");
+    if (u && j.updatedAt) u.textContent = j.updatedAt;
+    try { sessionStorage.setItem("ipstat-pw", pw); } catch(e){}
+  }
+  document.getElementById("lockForm").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    const pw = document.getElementById("pw").value;
+    const err = document.getElementById("pwErr"); const btn = document.getElementById("pwBtn");
+    err.textContent = ""; btn.disabled = true;
+    try { await unlock(pw); }
+    catch(ex){ err.textContent = (ex && ex.name === "OperationError") ? "密码错误，请重试" : "加载失败：" + ((ex && ex.message) || "未知"); }
+    finally { btn.disabled = false; }
+  });
+  (async function(){
+    let saved = null; try { saved = sessionStorage.getItem("ipstat-pw"); } catch(e){}
+    if (saved){ try { await unlock(saved); } catch(e){ try { sessionStorage.removeItem("ipstat-pw"); } catch(_){} } }
+    else { const p = document.getElementById("pw"); if (p) p.focus(); }
+  })();
+})();
+</script>
+</body>
+</html>
