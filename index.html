@@ -51,6 +51,12 @@
   .empty{padding:24px;text-align:center;color:var(--muted)}
   .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
   .na{color:var(--muted)}
+  .badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600}
+  .badge.paid{background:rgba(22,163,74,.14);color:var(--good)}
+  .badge.unpaid{background:rgba(217,119,6,.15);color:#d97706}
+  tr.paidrow td{color:var(--muted)}
+  tr.paidrow td.money{color:var(--muted);font-weight:400}
+  .kpi.unpaid .v{color:#d97706}
   input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
   .formula{font-size:13px;line-height:1.7}
   .formula code{background:var(--sel);padding:1px 6px;border-radius:5px}
@@ -87,6 +93,7 @@
     <div class="kpi"><div class="l" data-i18n="kDays"></div><div class="v" id="kDays">—</div></div>
     <div class="kpi"><div class="l" data-i18n="kIP"></div><div class="v" id="kIP">—</div></div>
     <div class="kpi money"><div class="l" data-i18n="kMoney"></div><div class="v" id="kMoney">—</div></div>
+    <div class="kpi unpaid"><div class="l" data-i18n="kUnpaid"></div><div class="v" id="kUnpaid">—</div></div>
   </div>
 
   <div class="card" style="margin-top:16px" id="summaryCard">
@@ -107,6 +114,7 @@
           <th><span class="dot" style="background:var(--b4)"></span>bot4</th>
           <th data-i18n="colTotalIP"></th>
           <th data-i18n="colMoney"></th>
+          <th class="l" data-i18n="colPaid"></th>
         </tr></thead>
         <tbody id="sumBody"></tbody>
         <tfoot id="sumFoot"></tfoot>
@@ -144,8 +152,8 @@
       title:"Thống kê IP thực tế & tiền theo ngày",
       subtitle:"Nguồn: report \"Daily Summary\" của Proxy-bot (Telegram) và IP của CNZZ cho từng bot. Cập nhật mỗi tối khoảng 23:30 giờ VN.",
       kDays:"Số ngày đã chọn", kIP:"Tổng IP thực tế (đã chọn)", kMoney:"Tổng tiền (đã chọn)",
-      sumTitle:"Tổng hợp theo ngày", selAll:"Chọn tất cả", selNone:"Bỏ chọn", tickHint:"Tick ngày để tính tổng tiền.",
-      colDate:"Ngày", colTotalIP:"Tổng IP", colMoney:"Tiền ($)",
+      sumTitle:"Tổng hợp theo ngày", selAll:"Chọn tất cả", selNone:"Bỏ chọn", tickHint:"Mặc định chỉ tick các ngày chưa thanh toán. Tick ngày để tính tổng tiền.",
+      colDate:"Ngày", colTotalIP:"Tổng IP", colMoney:"Tiền ($)", colPaid:"Thanh toán", paidYes:"Đã thanh toán", paidNo:"Chưa thanh toán", kUnpaid:"Chưa thanh toán (tất cả)",
       sumNote:"Các cột bot = IP thực tế của từng bot. Dòng cuối là tổng của các ngày đang được chọn.",
       chTotal:"Tổng 4 bot theo ngày: Tổng IP thực tế & Tiền", chIp:"IP CNZZ theo ngày", chSucc:"Tổng Success theo ngày",
       detTitle:"Chi tiết từng ngày", fTitle:"Công thức",
@@ -174,8 +182,8 @@
       title:"每日实际 IP 与收益统计",
       subtitle:"数据来源：Proxy-bot 的 \"Daily Summary\" 报告（Telegram）及各机器人对应的 CNZZ IP。每晚约 23:30（越南时间）更新。",
       kDays:"已选天数", kIP:"实际 IP 合计（已选）", kMoney:"金额合计（已选）",
-      sumTitle:"每日汇总", selAll:"全选", selNone:"取消全选", tickHint:"勾选日期以计算总金额。",
-      colDate:"日期", colTotalIP:"IP 合计", colMoney:"金额 ($)",
+      sumTitle:"每日汇总", selAll:"全选", selNone:"取消全选", tickHint:"默认只勾选未付款日期。勾选日期以计算总金额。",
+      colDate:"日期", colTotalIP:"IP 合计", colMoney:"金额 ($)", colPaid:"付款状态", paidYes:"已付款", paidNo:"未付款", kUnpaid:"未付款合计（全部）",
       sumNote:"各 bot 列 = 该机器人的实际 IP。最后一行为当前所选日期的合计。",
       chTotal:"4 个机器人每日合计：实际 IP 合计与金额", chIp:"每日 CNZZ IP", chSucc:"每日 Success 合计",
       detTitle:"每日明细", fTitle:"计算公式",
@@ -245,7 +253,7 @@
   function computeDay(doc){
     const bots = {}; let total = 0;
     BOTS.forEach(k => { bots[k] = computeBot(doc.bots && doc.bots[k]); total += bots[k].real; });
-    return {date: doc.date, bots, total, money: total * 0.05 * 0.15};
+    return {date: doc.date, bots, total, money: total * 0.05 * 0.15, paid: doc.paid === true};
   }
 
   function td(text, cls){ const c = document.createElement("td"); c.textContent = text; if (cls) c.className = cls; return c; }
@@ -261,7 +269,7 @@
   }
 
   function messageRow(msg){
-    const tr = document.createElement("tr"); const c = td(msg, "empty"); c.colSpan = 8; tr.appendChild(c); return tr;
+    const tr = document.createElement("tr"); const c = td(msg, "empty"); c.colSpan = 9; tr.appendChild(c); return tr;
   }
 
   function renderSummary(){
@@ -273,6 +281,7 @@
     days.slice().reverse().forEach(d => {
       const tr = document.createElement("tr");
       if (selected.has(d.date)) tr.classList.add("selected");
+      if (d.paid) tr.classList.add("paidrow");
       const c0 = document.createElement("td"); c0.className = "l";
       const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = selected.has(d.date);
       cb.setAttribute("aria-label", T().selectDay(fmtDate(d.date)));
@@ -282,6 +291,9 @@
       BOTS.forEach(k => tr.appendChild(td(nf.format(d.bots[k].real))));
       tr.appendChild(td(nf.format(d.total)));
       tr.appendChild(td(nf2.format(d.money), "money"));
+      const cp = document.createElement("td"); cp.className = "l";
+      const bd = document.createElement("span"); bd.className = "badge " + (d.paid ? "paid" : "unpaid"); bd.textContent = d.paid ? "✓ " + T().paidYes : T().paidNo;
+      cp.appendChild(bd); tr.appendChild(cp);
       body.appendChild(tr);
     });
     const sel = days.filter(d => selected.has(d.date));
@@ -292,6 +304,7 @@
     const tIP = sel.reduce((s,d)=>s+d.total,0);
     tr.appendChild(td(nf.format(tIP)));
     tr.appendChild(td(nf2.format(tIP*0.05*0.15), "money"));
+    tr.appendChild(td("", "l"));
     foot.appendChild(tr);
     const all = document.getElementById("chkAll");
     all.checked = sel.length === days.length && days.length > 0;
@@ -305,6 +318,8 @@
     document.getElementById("kDays").textContent = status === "ok" ? nf.format(sel.length) : "—";
     document.getElementById("kIP").textContent = status === "ok" ? nf.format(tIP) : "—";
     document.getElementById("kMoney").textContent = status === "ok" ? "$" + nf2.format(tIP*0.05*0.15) : "—";
+    const uIP = days.filter(d => !d.paid).reduce((s,d)=>s+d.total,0);
+    document.getElementById("kUnpaid").textContent = status === "ok" ? "$" + nf2.format(uIP*0.05*0.15) : "—";
   }
 
   function renderDetails(){
@@ -319,7 +334,7 @@
       const det = document.createElement("details"); if (i === 0) det.open = true;
       const sum = document.createElement("summary");
       const a = document.createElement("span"); a.textContent = T().dayLabel(fmtDate(d.date));
-      const b = document.createElement("span"); b.className = "m"; b.textContent = T().dayMeta(nf.format(d.total), nf2.format(d.money));
+      const b = document.createElement("span"); b.className = "m"; b.textContent = T().dayMeta(nf.format(d.total), nf2.format(d.money)) + " · " + (d.paid ? T().paidYes : T().paidNo);
       sum.append(a, b); det.appendChild(sum);
       const sc = document.createElement("div"); sc.className = "scroll";
       const t = document.createElement("table");
@@ -391,7 +406,7 @@
 
   function setRows(docs){
     days = docs.filter(x => x && x.date).map(computeDay).sort((a,b)=> a.date < b.date ? -1 : 1);
-    if (!selectionTouched){ selected.clear(); days.forEach(d => selected.add(d.date)); }
+    if (!selectionTouched){ selected.clear(); days.forEach(d => { if (!d.paid) selected.add(d.date); }); }
     else { const known = new Set(days.map(d=>d.date)); [...selected].forEach(x => { if(!known.has(x)) selected.delete(x); }); }
     status = "ok";
     renderSummary(); renderDetails(); renderCharts();
