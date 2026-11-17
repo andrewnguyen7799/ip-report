@@ -169,7 +169,7 @@
       errLoad:"Lỗi tải dữ liệu: ", unknown:"không rõ",
       formula:[
         "• <b>Tổng Success</b> (mỗi bot) = Success mục \"Total\" của <code>SV1 + SV2 + SV3</code> (thiếu server nào tính 0)",
-        "• <b>Tỷ lệ</b> = <code>IP CNZZ ÷ Tổng Success</code>, cắt lấy 2 chữ số thập phân (0,967 → 0,96)",
+        "• <b>Tỷ lệ</b> = <code>IP CNZZ ÷ Tổng Success</code>, cắt lấy 2 chữ số thập phân (0,967 → 0,96); nếu ≥ 1 thì tính là 1",
         "• <b>IP thực tế</b> (mỗi bot) = <code>Tổng Success × Tỷ lệ</code>, làm tròn lên số nguyên",
         "• <b>Tổng IP</b> = IP thực tế bot + bot2 + bot3 + bot4",
         "• <b>Tiền</b> = <code>Tổng IP × 0,05 × 0,15</code> $"
@@ -199,7 +199,7 @@
       errLoad:"数据加载出错：", unknown:"未知",
       formula:[
         "• <b>Success 合计</b>（每个机器人）= <code>SV1 + SV2 + SV3</code> 报告中 \"Total\" 的 Success（缺少的服务器记为 0）",
-        "• <b>比例</b> = <code>CNZZ IP ÷ Success 合计</code>，截取两位小数（0.967 → 0.96）",
+        "• <b>比例</b> = <code>CNZZ IP ÷ Success 合计</code>，截取两位小数（0.967 → 0.96）；若 ≥ 1 则按 1 计算",
         "• <b>实际 IP</b>（每个机器人）= <code>Success 合计 × 比例</code>，向上取整",
         "• <b>IP 合计</b> = bot + bot2 + bot3 + bot4 的实际 IP",
         "• <b>金额</b> = <code>IP 合计 × 0.05 × 0.15</code> $"
@@ -245,7 +245,7 @@
     let ratioRaw = null, ratioCents = null, real = 0;
     if (hasIp && success > 0){
       ratioRaw = ip / success;
-      ratioCents = Math.floor((ip * 100) / success);        // truncate to 2 decimals
+      ratioCents = Math.min(100, Math.floor((ip * 100) / success)); // truncate to 2 decimals, cap at 1.00
       real = Math.floor((success * ratioCents + 99) / 100);  // round UP to integer
     }
     return {sv1, sv2, sv3, success, ip, ratioRaw, ratioCents, real};
