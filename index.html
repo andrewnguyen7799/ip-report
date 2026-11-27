@@ -172,7 +172,7 @@
         "• <b>Tỷ lệ</b> = <code>IP CNZZ ÷ Tổng Success</code>, cắt lấy 2 chữ số thập phân (0,967 → 0,96); nếu ≥ 1 thì tính là 1",
         "• <b>IP thực tế</b> (mỗi bot) = <code>Tổng Success × Tỷ lệ</code>, làm tròn lên số nguyên",
         "• <b>Tổng IP</b> = IP thực tế bot + bot2 + bot3 + bot4",
-        "• <b>Tiền</b> = <code>Tổng IP × 0,05 × 0,15</code> $"
+        "• <b>Tiền</b> = <code>Tổng IP × 0,05 × tỷ giá</code> $ (tỷ giá 1 RMB = 0,147 USDT từ 23/11/2026; trước đó 0,15)"
       ],
       formulaNote:"Bot chưa có IP CNZZ thì IP thực tế tính 0. Ngày theo report (giờ VN) khớp với ngày CNZZ (giờ Trung Quốc).",
       locale:"vi-VN"
@@ -202,7 +202,7 @@
         "• <b>比例</b> = <code>CNZZ IP ÷ Success 合计</code>，截取两位小数（0.967 → 0.96）；若 ≥ 1 则按 1 计算",
         "• <b>实际 IP</b>（每个机器人）= <code>Success 合计 × 比例</code>，向上取整",
         "• <b>IP 合计</b> = bot + bot2 + bot3 + bot4 的实际 IP",
-        "• <b>金额</b> = <code>IP 合计 × 0.05 × 0.15</code> $"
+        "• <b>金额</b> = <code>IP 合计 × 0.05 × 汇率</code> $（汇率 1 RMB = 0.147 USDT，自 2026-11-23 起；此前为 0.15）"
       ],
       formulaNote:"尚无 CNZZ IP 的机器人，实际 IP 记为 0。报告日期（越南时间）与 CNZZ 日期（北京时间）相对应。",
       locale:"zh-CN"
@@ -250,10 +250,12 @@
     }
     return {sv1, sv2, sv3, success, ip, ratioRaw, ratioCents, real};
   }
+  // Tỷ giá RMB→USDT: 0,15 trước 23/11/2026; 0,147 từ 23/11/2026
+  function rateFor(date){ return String(date) >= "2026-11-23" ? 0.147 : 0.15; }
   function computeDay(doc){
     const bots = {}; let total = 0;
     BOTS.forEach(k => { bots[k] = computeBot(doc.bots && doc.bots[k]); total += bots[k].real; });
-    return {date: doc.date, bots, total, money: total * 0.05 * 0.15, paid: doc.paid === true};
+    return {date: doc.date, bots, total, money: total * 0.05 * rateFor(doc.date), paid: doc.paid === true};
   }
 
   function td(text, cls){ const c = document.createElement("td"); c.textContent = text; if (cls) c.className = cls; return c; }
@@ -303,7 +305,7 @@
     BOTS.forEach(k => tr.appendChild(td(nf.format(sel.reduce((s,d)=>s+d.bots[k].real,0)))));
     const tIP = sel.reduce((s,d)=>s+d.total,0);
     tr.appendChild(td(nf.format(tIP)));
-    tr.appendChild(td(nf2.format(tIP*0.05*0.15), "money"));
+    tr.appendChild(td(nf2.format(sel.reduce((s,d)=>s+d.money,0)), "money"));
     tr.appendChild(td("", "l"));
     foot.appendChild(tr);
     const all = document.getElementById("chkAll");
@@ -317,9 +319,9 @@
     const tIP = sel.reduce((s,d)=>s+d.total,0);
     document.getElementById("kDays").textContent = status === "ok" ? nf.format(sel.length) : "—";
     document.getElementById("kIP").textContent = status === "ok" ? nf.format(tIP) : "—";
-    document.getElementById("kMoney").textContent = status === "ok" ? "$" + nf2.format(tIP*0.05*0.15) : "—";
-    const uIP = days.filter(d => !d.paid).reduce((s,d)=>s+d.total,0);
-    document.getElementById("kUnpaid").textContent = status === "ok" ? "$" + nf2.format(uIP*0.05*0.15) : "—";
+    document.getElementById("kMoney").textContent = status === "ok" ? "$" + nf2.format(sel.reduce((s,d)=>s+d.money,0)) : "—";
+    const uMoney = days.filter(d => !d.paid).reduce((s,d)=>s+d.money,0);
+    document.getElementById("kUnpaid").textContent = status === "ok" ? "$" + nf2.format(uMoney) : "—";
   }
 
   function renderDetails(){
